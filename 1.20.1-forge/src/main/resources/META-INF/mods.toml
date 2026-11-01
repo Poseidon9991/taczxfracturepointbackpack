@@ -1,0 +1,48 @@
+modLoader = "javafml"
+loaderVersion = "${loader_version_range}"
+license = "${mod_license}"
+
+[[mods]]
+modId = "${mod_id}"
+version = "${mod_version}"
+displayName = "${mod_name}"
+authors = "${mod_authors}"
+description = '''${mod_description}'''
+
+[[dependencies.${mod_id}]]
+modId = "forge"
+mandatory = true
+versionRange = "${forge_version_range}"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "minecraft"
+mandatory = true
+versionRange = "${minecraft_version_range}"
+ordering = "NONE"
+side = "BOTH"
+
+# TaCZ - the guns whose ammo lookups/consumption we extend.
+[[dependencies.${mod_id}]]
+modId = "tacz"
+mandatory = true
+versionRange = "[1.1.5,)"
+ordering = "AFTER"
+side = "BOTH"
+
+# WARBORN / Fracture Point - the backpacks we expose to TaCZ.
+[[dependencies.${mod_id}]]
+modId = "fracturepoint"
+mandatory = true
+versionRange = "[3.0.0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+# Curios - optional; WARBORN backpacks can equip to its back slot.
+[[dependencies.${mod_id}]]
+modId = "curios"
+mandatory = false
+versionRange = "[5.0.0,)"
+ordering = "AFTER"
+side = "BOTH"
