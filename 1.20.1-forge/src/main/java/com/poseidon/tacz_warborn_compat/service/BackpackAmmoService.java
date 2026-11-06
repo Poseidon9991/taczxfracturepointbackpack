@@ -1,10 +1,12 @@
 package com.poseidon.tacz_warborn_compat.service;
 
+import com.poseidon.tacz_warborn_compat.TaczWarbornCompat;
 import com.poseidon.tacz_warborn_compat.config.WarbornCompatConfig;
 import com.raiiiden.warborn.common.item.BackpackItem;
 import com.tacz.guns.api.entity.IGunOperator;
 import com.tacz.guns.api.item.IAmmo;
 import com.tacz.guns.api.item.IAmmoBox;
+import com.tacz.guns.api.item.IGun;
 import com.tacz.guns.api.item.gun.AbstractGunItem;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -47,16 +49,28 @@ public final class BackpackAmmoService {
         if(!(entity instanceof Player player) || !WarbornCompatConfig.isEnabled()) {
             return false;
         }
+        // Dummy-ammo guns feed from an internal pool and never touch item
+        // ammo. OR-ing the backpack scan would make hasAmmoToConsume lie while
+        // consumeAmmoFromPlayer stays on the dummy path, letting per-round
+        // reload scripts load rounds for free.
+        if(gunStack.getItem() instanceof IGun igun && igun.useDummyAmmo(gunStack)) {
+            return false;
+        }
         for(IItemHandler storage : collectStorage(player)) {
             for(int i = 0; i < storage.getSlots(); i++) {
                 ItemStack stack = storage.getStackInSlot(i);
                 if(stack.isEmpty()) {
                     continue;
                 }
-                if(stack.getItem() instanceof IAmmo ammo && ammo.isAmmoOfGun(gunStack, stack)) {
+                // Simulated extract mirrors what the consume path can really
+                // take: getStackInSlot alone reports ammo in slots a handler
+                // refuses to give back, which would lie the same way.
+                if(stack.getItem() instanceof IAmmo ammo && ammo.isAmmoOfGun(gunStack, stack)
+                        && !storage.extractItem(i, 1, true).isEmpty()) {
                     return true;
                 }
-                if(stack.getItem() instanceof IAmmoBox ammoBox && ammoBox.isAmmoBoxOfGun(gunStack, stack)) {
+                if(stack.getItem() instanceof IAmmoBox ammoBox && ammoBox.isAmmoBoxOfGun(gunStack, stack)
+                        && ammoBox.getAmmoCount(stack) > 0) {
                     return true;
                 }
             }
@@ -114,28 +128,55 @@ public final class BackpackAmmoService {
         return consumed;
     }
 
+    private static long lastDebugLog;
+
     // Resolves the ITEM_HANDLER capability of every WARBORN backpack the
     // player can feed from: the chest armor slot (BackpackItem is an
     // ArmorItem), any Curios slot (soft dep - guarded), and the inventory.
     private static List<IItemHandler> collectStorage(Player player) {
         List<IItemHandler> out = new ArrayList<>();
+        StringBuilder dbg = new StringBuilder();
 
         if(WarbornCompatConfig.wornEnabled()) {
-            addIfBackpack(out, player.getItemBySlot(EquipmentSlot.CHEST));
+            ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
+            addIfBackpack(out, chest);
+            dbg.append("chest=").append(chest.getItem());
             if(ModList.get().isLoaded("curios")) {
                 List<ItemStack> curioStacks = new ArrayList<>();
                 CuriosCompat.collectStacks(player, curioStacks);
+                int backpacks = 0, noCap = 0;
                 for(ItemStack stack : curioStacks) {
+                    if(BackpackItem.isBackpackItem(stack)) {
+                        backpacks++;
+                        if(stack.getCapability(ForgeCapabilities.ITEM_HANDLER).resolve().isEmpty()) {
+                            noCap++;
+                        }
+                    }
                     addIfBackpack(out, stack);
                 }
+                dbg.append(" curios=").append(curioStacks.size())
+                   .append("stacks/").append(backpacks).append("bp/").append(noCap).append("nocap");
             }
         }
 
         if(WarbornCompatConfig.inventoryEnabled()) {
             Inventory inventory = player.getInventory();
+            int invBp = 0;
             for(int i = 0; i < inventory.getContainerSize(); i++) {
-                addIfBackpack(out, inventory.getItem(i));
+                ItemStack stack = inventory.getItem(i);
+                if(BackpackItem.isBackpackItem(stack)) {
+                    invBp++;
+                }
+                addIfBackpack(out, stack);
             }
+            dbg.append(" invBp=").append(invBp);
+        }
+
+        long now = System.currentTimeMillis();
+        if(now - lastDebugLog > 3000) {
+            lastDebugLog = now;
+            TaczWarbornCompat.LOGGER.info("[TaCZ-WB] {} -> {} storages | {}",
+                    player.level().isClientSide ? "client" : "server", out.size(), dbg);
         }
 
         return out;
