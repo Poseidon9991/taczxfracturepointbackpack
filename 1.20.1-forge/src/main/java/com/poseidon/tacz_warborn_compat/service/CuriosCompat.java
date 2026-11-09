@@ -18,13 +18,22 @@ public final class CuriosCompat {
     // Collects the raw ItemStacks sitting in every Curios slot. The caller
     // filters them through BackpackItem.isBackpackItem, so this stays
     // agnostic about what a backpack is.
+    //
+    // getCurios() is walked by hand: it covers every registered slot type,
+    // which is all we need since the caller does the filtering. Stacks are
+    // deduplicated by identity so a backpack reachable through two paths is
+    // only scanned once.
     public static void collectStacks(Player player, List<ItemStack> out) {
-        CuriosApi.getCuriosInventory(player).ifPresent(inv ->
-                inv.getCurios().values().forEach(stacksHandler -> {
-                    IDynamicStackHandler stacks = stacksHandler.getStacks();
-                    for(int i = 0; i < stacks.getSlots(); i++) {
-                        out.add(stacks.getStackInSlot(i));
+        CuriosApi.getCuriosInventory(player).ifPresent(inv -> {
+            inv.getCurios().values().forEach(stacksHandler -> {
+                IDynamicStackHandler stacks = stacksHandler.getStacks();
+                for(int i = 0; i < stacks.getSlots(); i++) {
+                    ItemStack stack = stacks.getStackInSlot(i);
+                    if(!stack.isEmpty() && !out.contains(stack)) {
+                        out.add(stack);
                     }
-                }));
+                }
+            });
+        });
     }
 }

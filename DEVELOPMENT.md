@@ -5,7 +5,7 @@
 - `1.20.1-forge/` — the ForgeGradle project (build from inside this folder)
 - `src/main/java/com/poseidon/tacz_warborn_compat/`
   - `TaczWarbornCompat` — mod entry, registers the server config
-  - `config/WarbornCompatConfig` — `enabled`, `wornBackpack`, `inventoryBackpacks`
+  - `config/WarbornCompatConfig` — `enabled`, `wornBackpack`, `inventoryBackpacks`, `debugLogging`
   - `service/BackpackAmmoService` — scans WARBORN backpack stacks, exposes
     their `ITEM_HANDLER` storage to the TaCZ ammo flow
   - `service/CuriosCompat` — every `CuriosApi` reference, only loaded behind
@@ -14,6 +14,8 @@
     - `AbstractGunItemMixin` — `canReload`, `hasInventoryAmmo`
     - `ModernKineticGunScriptAPIMixin` — `hasAmmoToConsume`, `consumeAmmoFromPlayer`
     - `GunHudOverlayMixin` — `handleInventoryAmmo` (HUD reserve count)
+    - `BackpackItemMixin` — `getShareTag`/`readShareTag` carry handler contents under `BackpackCap`
+    - `BackpackCapabilityProviderMixin` — mirrors the serialized handler into the stack's `BackpackCap` tag
 
 ## How it works
 

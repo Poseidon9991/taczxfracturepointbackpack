@@ -9,35 +9,34 @@
 | `enabled` | true | Master switch for the whole bridge |
 | `wornBackpack` | true | Include chest-slot + Curios backpacks |
 | `inventoryBackpacks` | true | Include inventory-carried backpacks |
+| `debugLogging` | false | Enables the `[TaCZ-WB]` diagnostics |
 
-All getters return `true` while the spec isn't loaded yet (early-calls safe).
+Getters return `true` while the spec isn't loaded yet (early-calls safe);
+`debugEnabled` returns `false` until the spec loads.
 
 ## Diagnostics — `[TaCZ-WB]`
 
-`collectStorage` logs a rate-limited (3s) summary during ammo checks:
+Opt-in: set `debugLogging = true`. During ammo checks a rate-limited (3s)
+summary is logged:
 
 ```
-[TaCZ-WB] server -> 1 storages | chest=air curios=5stacks/1bp/0nocap invBp=0
+[TaCZ-WB] server -> 1 storages [12/54 filled/slots]
 ```
 
-Fields: side · `storages` = handlers collected · `chest=` chest-slot item ·
-`curios=` stacks scanned / backpacks found / backpacks missing the
-capability (`nocap`) · `invBp=` inventory backpacks.
-
-A `nocap > 0` means the curio slot's stack lost its `ITEM_HANDLER`
-capability — the strongest lead for the "Curios-worn ammo doesn't work"
-report.
+Fields: side (`client` or `server`) · `storages` = handlers collected · the
+bracketed list is `filled/total` slots per storage, comma-separated.
 
 ## Known issues / investigation notes
 
-- **Curios-worn backpack ammo not detected** — under investigation.
-  `collectStacks` covers all curio slot types incl. `backpack`; suspects:
-  (a) the worn stack's capability resolves empty after `ItemStack.copy()`
-  on equip — `BackpackCapabilityProvider` snapshots `BackpackCap` NBT at
-  construction, so caps must come through `deserializeNBT` (ForgeCaps),
-  (b) curio contents not synced on the client `canReload` path,
-  (c) extraction writes the handler but the curio slot never dirties →
-  stale ForgeCaps. Read `[TaCZ-WB]` lines to narrow it down.
+- **Curios-worn backpack ammo not detected — fixed after v1.0.1
+  (unreleased, ships in the next version).** Symptom: backpack ammo was
+  intermittently not seen for Curios-worn backpacks while
+  inventory-carried ones worked. `BackpackItemMixin` overrides
+  `getShareTag`/`readShareTag` to carry the serialized handler under
+  `BackpackCap`, and `BackpackCapabilityProviderMixin` mirrors the
+  serialized handler into the stack's `BackpackCap` tag on
+  serialize/deserialize. User-verified in game; the exact root cause was
+  not isolated.
 - **Version-range gotcha (fixed):** WARBORN's jar reports version
   `3.0.0-PT1-fix` — a Maven qualifier below `3.0.0`. mods.toml requires
   `fracturepoint` but Forge accepted the qualifier anyway; if deps ever

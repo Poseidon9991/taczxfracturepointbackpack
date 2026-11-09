@@ -22,6 +22,11 @@ public final class WarbornCompatConfig {
             .comment("Allow guns to use ammo from WARBORN backpacks carried inside the player inventory.")
             .define("inventoryBackpacks", true);
 
+    public static final ForgeConfigSpec.BooleanValue DEBUG_LOGGING = BUILDER
+            .comment("Log a rate-limited [TaCZ-WB] summary of the backpack storages found during ammo checks.",
+                    "Leave off unless diagnosing a detection problem.")
+            .define("debugLogging", false);
+
     public static final ForgeConfigSpec SPEC = BUILDER.build();
 
     public static boolean isEnabled() {
@@ -34,5 +39,9 @@ public final class WarbornCompatConfig {
 
     public static boolean inventoryEnabled() {
         return !SPEC.isLoaded() || INVENTORY_BACKPACKS.get();
+    }
+
+    public static boolean debugEnabled() {
+        return SPEC.isLoaded() && DEBUG_LOGGING.get();
     }
 }

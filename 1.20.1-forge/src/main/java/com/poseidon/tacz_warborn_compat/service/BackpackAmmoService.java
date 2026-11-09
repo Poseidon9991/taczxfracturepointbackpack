@@ -8,12 +8,15 @@ import com.tacz.guns.api.item.IAmmo;
 import com.tacz.guns.api.item.IAmmoBox;
 import com.tacz.guns.api.item.IGun;
 import com.tacz.guns.api.item.gun.AbstractGunItem;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.common.capabilities.ForgeCapabilities;
+import net.minecraftforge.common.util.INBTSerializable;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.items.IItemHandler;
 
@@ -31,9 +34,8 @@ import java.util.List;
 // our mixin then extracts the remaining amount from backpacks and bumps the
 // returned count so reload math stays correct.
 //
-// WARBORN backpacks expose ForgeCapabilities.ITEM_HANDLER on the ItemStack
-// itself; handler edits are the live state and persist through Forge's normal
-// capability save cycle, so no manual write-back is needed after extraction.
+// consumeFromBackpacks mirrors the handler into the stack's BackpackCap
+// tag after an extraction so the stack NBT matches the handler.
 public final class BackpackAmmoService {
 
     private BackpackAmmoService() {
@@ -113,16 +115,26 @@ public final class BackpackAmmoService {
         return (gun.useInventoryAmmo(gunStack) && !needsAmmoCheck) || gun.useDummyAmmo(gunStack);
     }
 
+    @SuppressWarnings("unchecked")
     public static int consumeFromBackpacks(Player player, AbstractGunItem gun, ItemStack gunStack, int remaining) {
         int consumed = 0;
-        for(IItemHandler storage : collectStorage(player)) {
+        List<ItemStack> backpacks = collectBackpackStacks(player);
+        for(ItemStack bpStack : backpacks) {
             if(remaining <= 0) {
                 break;
             }
+            var cap = bpStack.getCapability(ForgeCapabilities.ITEM_HANDLER).resolve();
+            if(cap.isEmpty()) {
+                continue;
+            }
+            IItemHandler storage = cap.get();
             int extracted = gun.findAndExtractInventoryAmmo(storage, gunStack, remaining);
             if(extracted > 0) {
                 consumed += extracted;
                 remaining -= extracted;
+                if(storage instanceof INBTSerializable<?> serializable) {
+                    bpStack.getOrCreateTag().put("BackpackCap", ((INBTSerializable<CompoundTag>) serializable).serializeNBT());
+                }
             }
         }
         return consumed;
@@ -130,62 +142,97 @@ public final class BackpackAmmoService {
 
     private static long lastDebugLog;
 
-    // Resolves the ITEM_HANDLER capability of every WARBORN backpack the
-    // player can feed from: the chest armor slot (BackpackItem is an
-    // ArmorItem), any Curios slot (soft dep - guarded), and the inventory.
     private static List<IItemHandler> collectStorage(Player player) {
         List<IItemHandler> out = new ArrayList<>();
-        StringBuilder dbg = new StringBuilder();
+        for(ItemStack bpStack : collectBackpackStacks(player)) {
+            addIfBackpack(out, bpStack);
+        }
+        logStorages(player, out);
+        return out;
+    }
+
+    private static void logStorages(Player player, List<IItemHandler> storages) {
+        if(!WarbornCompatConfig.debugEnabled()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if(now - lastDebugLog <= 3000) {
+            return;
+        }
+        lastDebugLog = now;
+        StringBuilder contents = new StringBuilder();
+        for(IItemHandler storage : storages) {
+            int nonEmpty = 0;
+            for(int i = 0; i < storage.getSlots(); i++) {
+                if(!storage.getStackInSlot(i).isEmpty()) {
+                    nonEmpty++;
+                }
+            }
+            if(contents.length() > 0) {
+                contents.append(',');
+            }
+            contents.append(nonEmpty).append('/').append(storage.getSlots());
+        }
+        TaczWarbornCompat.LOGGER.info("[TaCZ-WB] {} -> {} storages [{} filled/slots]",
+                player.level().isClientSide ? "client" : "server", storages.size(), contents);
+    }
+
+    // Every WARBORN backpack stack the player can feed from: chest armor
+    // slot, any Curios slot (soft dep, guarded), and the inventory.
+    public static List<ItemStack> collectBackpackStacks(Player player) {
+        List<ItemStack> out = new ArrayList<>();
 
         if(WarbornCompatConfig.wornEnabled()) {
             ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
-            addIfBackpack(out, chest);
-            dbg.append("chest=").append(chest.getItem());
+            if(BackpackItem.isBackpackItem(chest) && !out.contains(chest)) {
+                out.add(chest);
+            }
             if(ModList.get().isLoaded("curios")) {
                 List<ItemStack> curioStacks = new ArrayList<>();
                 CuriosCompat.collectStacks(player, curioStacks);
-                int backpacks = 0, noCap = 0;
                 for(ItemStack stack : curioStacks) {
-                    if(BackpackItem.isBackpackItem(stack)) {
-                        backpacks++;
-                        if(stack.getCapability(ForgeCapabilities.ITEM_HANDLER).resolve().isEmpty()) {
-                            noCap++;
-                        }
+                    if(BackpackItem.isBackpackItem(stack) && !out.contains(stack)) {
+                        out.add(stack);
                     }
-                    addIfBackpack(out, stack);
                 }
-                dbg.append(" curios=").append(curioStacks.size())
-                   .append("stacks/").append(backpacks).append("bp/").append(noCap).append("nocap");
             }
         }
 
         if(WarbornCompatConfig.inventoryEnabled()) {
             Inventory inventory = player.getInventory();
-            int invBp = 0;
             for(int i = 0; i < inventory.getContainerSize(); i++) {
                 ItemStack stack = inventory.getItem(i);
-                if(BackpackItem.isBackpackItem(stack)) {
-                    invBp++;
+                if(BackpackItem.isBackpackItem(stack) && !out.contains(stack)) {
+                    out.add(stack);
                 }
-                addIfBackpack(out, stack);
             }
-            dbg.append(" invBp=").append(invBp);
-        }
-
-        long now = System.currentTimeMillis();
-        if(now - lastDebugLog > 3000) {
-            lastDebugLog = now;
-            TaczWarbornCompat.LOGGER.info("[TaCZ-WB] {} -> {} storages | {}",
-                    player.level().isClientSide ? "client" : "server", out.size(), dbg);
         }
 
         return out;
     }
 
+    @SuppressWarnings("unchecked")
     private static void addIfBackpack(List<IItemHandler> out, ItemStack stack) {
-        if(!BackpackItem.isBackpackItem(stack)) {
-            return;
-        }
-        stack.getCapability(ForgeCapabilities.ITEM_HANDLER).ifPresent(out::add);
+        stack.getCapability(ForgeCapabilities.ITEM_HANDLER).ifPresent(handler -> {
+            if(handler instanceof INBTSerializable<?> serializable && stack.hasTag()) {
+                CompoundTag tag = stack.getTag();
+                if(tag != null && tag.contains("BackpackCap", Tag.TAG_COMPOUND)) {
+                    boolean handlerEmpty = true;
+                    for(int i = 0; i < handler.getSlots(); i++) {
+                        if(!handler.getStackInSlot(i).isEmpty()) {
+                            handlerEmpty = false;
+                            break;
+                        }
+                    }
+                    if(handlerEmpty) {
+                        CompoundTag capTag = tag.getCompound("BackpackCap");
+                        if(capTag.contains("Items", Tag.TAG_LIST) && !capTag.getList("Items", Tag.TAG_COMPOUND).isEmpty()) {
+                            ((INBTSerializable<CompoundTag>) serializable).deserializeNBT(capTag);
+                        }
+                    }
+                }
+            }
+            out.add(handler);
+        });
     }
 }

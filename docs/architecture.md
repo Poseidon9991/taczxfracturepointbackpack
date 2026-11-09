@@ -27,12 +27,14 @@ flowchart LR
 | File | Role |
 |---|---|
 | `TaczWarbornCompat` | `@Mod` entry — registers the SERVER config |
-| `config/WarbornCompatConfig` | `enabled`, `wornBackpack`, `inventoryBackpacks` |
+| `config/WarbornCompatConfig` | `enabled`, `wornBackpack`, `inventoryBackpacks`, `debugLogging` |
 | `service/BackpackAmmoService` | `hasBackpackAmmo`, `countBackpackAmmo`, `consumeFromBackpacks`, `usesVirtualAmmo`, `collectStorage` |
 | `service/CuriosCompat` | Every `CuriosApi` reference — class only loads behind `ModList.isLoaded("curios")` |
 | `mixin/AbstractGunItemMixin` | `canReload`, `hasInventoryAmmo` → OR-in `hasBackpackAmmo` |
 | `mixin/ModernKineticGunScriptAPIMixin` | `hasAmmoToConsume` → OR-in; `consumeAmmoFromPlayer` → drain remainder |
 | `mixin/GunHudOverlayMixin` | `handleInventoryAmmo` → add backpack count to HUD reserve |
+| `mixin/BackpackItemMixin` | `getShareTag`/`readShareTag` → carry handler contents under `BackpackCap` (client-side Curios fix) |
+| `mixin/BackpackCapabilityProviderMixin` | `serializeNBT`/`deserializeNBT` → mirror the serialized handler into the stack's `BackpackCap` tag |
 
 ## Rules
 

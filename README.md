@@ -53,6 +53,7 @@ File: `config/tacz_warborn_compat-server.toml` (global) or
 enabled = true            # turn the whole feature on/off
 wornBackpack = true       # use ammo from the worn backpack (chest slot / Curios)
 inventoryBackpacks = true # use ammo from backpacks inside the inventory
+debugLogging = false      # log [TaCZ-WB] storage diagnostics
 ```
 
 Changes apply live on config reload — no restart needed on dedicated servers.
